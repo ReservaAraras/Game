@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orçamento | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--forest:#245747;--paper:#fffdf8;--cream:#f5f1e7;--line:#d9ded2;--muted:#687a73;--gold:#d5a84f;--shadow:0 18px 45px rgba(22,51,43,.14)}*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:1rem;background:var(--cream);color:var(--ink);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.card{width:min(720px,100%);margin:auto;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:1.4rem;box-shadow:var(--shadow)}.eyebrow{margin:0;color:#367565;font-size:.68rem;font-weight:800;letter-spacing:.14em}.card h1{margin:.2rem 0 .3rem;font:600 1.65rem Georgia,serif}.muted{color:var(--muted)}.summary{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;padding:1rem;background:#e5ecdc;border-radius:11px}.summary strong{font:600 1.7rem Georgia,serif}.summary small{color:var(--muted)}.section{margin-top:1.25rem}.section h2{font-size:.9rem;margin:0 0 .65rem}.control{display:grid;grid-template-columns:minmax(130px,1fr) minmax(130px,1.6fr) 64px;align-items:center;gap:.8rem;padding:.7rem 0;border-bottom:1px solid var(--line)}.control label{font-weight:750}.control small{display:block;color:var(--muted);font-size:.72rem;font-weight:400}.control output{text-align:right;font-weight:800;color:var(--forest)}input[type=range]{width:100%;accent-color:var(--forest)}.total{display:flex;justify-content:space-between;gap:1rem;padding:.8rem 0;font-weight:800}.total.warning{color:#923e2c}.actions{display:flex;justify-content:flex-end;margin-top:1rem}.button{border:0;border-radius:9px;padding:.7rem 1rem;background:var(--forest);color:#fff;font:inherit;font-weight:800;cursor:pointer}.status{min-height:1.5em;margin:.8rem 0 0;color:var(--muted);font-size:.78rem}.model-note{border-top:1px solid var(--line);margin-top:1rem;padding-top:.8rem;color:var(--muted);font-size:.72rem}.button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}@media(max-width:520px){.control{grid-template-columns:1fr 60px}.control input{grid-column:1/-1;grid-row:2}.summary{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <main class="card" data-component="budget-panel">
+    <p class="eyebrow">DECISÕES DO MODELO</p><h1>Orçamento e prioridades</h1><p class="muted">Ajuste os cenários e observe como uma escolha pode distribuir os recursos da investigação.</p>
+    <div class="summary" aria-live="polite"><div><small>Orçamento de referência</small><strong id="budgetValue">R$ 50.000</strong></div><div><small id="budgetHint">Valores didáticos</small></div></div>
+    <section class="section" aria-labelledby="taxHeading"><h2 id="taxHeading">Alíquotas por zona</h2><div id="taxSliders"></div></section>
+    <section class="section" aria-labelledby="fundHeading"><h2 id="fundHeading">Alocação de fundos</h2><div id="fundSliders"></div><div id="fundTotal" class="total"><span>Total alocado</span><output>0%</output></div></section>
+    <div class="actions"><button class="button" type="button" data-action="submit">Aplicar cenário</button></div><p id="budgetStatus" class="status" role="status" aria-live="polite"></p><p class="model-note">Os percentuais e incentivos são parâmetros do simulador; não representam política pública, orçamento real ou recomendação financeira.</p>
+  </main>
+  <script>
+    (() => {
+      'use strict';
+      const taxRoot = document.querySelector('#taxSliders'); const fundRoot = document.querySelector('#fundSliders'); const total = document.querySelector('#fundTotal'); const status = document.querySelector('#budgetStatus');
+      const taxDefaults = [{ id: 'producao', label: 'Produção', value: 0 }, { id: 'turismo', label: 'Ecoturismo', value: 0 }, { id: 'servicos', label: 'Serviços', value: 0 }];
+      const fundDefaults = [{ id: 'seguranca', label: 'Cuidado e segurança', value: 30 }, { id: 'manutencao', label: 'Manutenção', value: 40 }, { id: 'agrofloresta', label: 'Agrofloresta', value: 30 }];
+      function renderSlider(root, item, prefix, suffix) { const wrapper = document.createElement('div'); wrapper.className = 'control'; const label = document.createElement('label'); label.htmlFor = `${prefix}-${item.id}`; label.textContent = item.label; const input = document.createElement('input'); input.type = 'range'; input.id = `${prefix}-${item.id}`; input.min = '0'; input.max = '100'; input.value = String(Math.max(0, Math.min(100, Number(item.value) || 0))); input.dataset.kind = prefix; input.dataset.id = item.id; const output = document.createElement('output'); output.htmlFor = input.id; output.textContent = `${input.value}${suffix}`; input.addEventListener('input', () => { output.textContent = `${input.value}${suffix}`; if (prefix === 'fund') updateFundTotal(); }); wrapper.append(label, input, output); root.appendChild(wrapper); }
+      function renderTaxSliders(items = taxDefaults) { taxRoot.replaceChildren(); items.forEach(item => renderSlider(taxRoot, item, 'tax', '%')); }
+      function renderFundSliders(items = fundDefaults) { fundRoot.replaceChildren(); items.forEach(item => renderSlider(fundRoot, item, 'fund', '%')); updateFundTotal(); }
+      function readValues(prefix) { return [...document.querySelectorAll(`input[data-kind="${prefix}"]`)].map(input => ({ id: input.dataset.id, value: Number(input.value) })); }
+      function updateFundTotal() { const value = readValues('fund').reduce((sum, item) => sum + item.value, 0); total.classList.toggle('warning', value > 100); total.querySelector('output').textContent = `${value}%`; return value; }
+      function submitBudgetChanges() { const funds = readValues('fund'); const payload = { taxes: readValues('tax'), funds, valid: funds.reduce((sum, item) => sum + item.value, 0) <= 100 }; status.textContent = payload.valid ? 'Cenário pronto para comparação.' : 'A alocação ultrapassa 100%. Ajuste os fundos antes de aplicar.'; if (payload.valid) window.dispatchEvent(new CustomEvent('reserva:budget-change', { detail: payload })); return payload; }
+      document.querySelector('[data-action="submit"]').addEventListener('click', submitBudgetChanges); renderTaxSliders(); renderFundSliders();
+      window.ReservaBudget = { renderTaxSliders, renderFundSliders, submitBudgetChanges, updateFundTotal, readValues };
+      window.renderTaxSliders = renderTaxSliders; window.renderFundSliders = renderFundSliders; window.submitBudgetChanges = submitBudgetChanges;
+    })();
+  </script>
+</body>
+</html>

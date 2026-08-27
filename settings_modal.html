@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configurações | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--forest:#245747;--forest2:#367565;--paper:#fffdf8;--cream:#f5f1e7;--line:#d9ded2;--gold:#d5a84f;--muted:#687a73;--shadow:0 18px 45px rgba(22,51,43,.16)}
+    *{box-sizing:border-box}body{display:grid;place-items:center;margin:0;min-height:100vh;padding:1rem;background:var(--cream);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.modal{width:min(560px,100%);margin:auto;background:var(--paper);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}.modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1.4rem 1.5rem 1rem;border-bottom:1px solid var(--line)}.eyebrow{margin:0;color:var(--forest2);font-size:.68rem;font-weight:800;letter-spacing:.14em}.modal h1{margin:.2rem 0 0;font:600 1.65rem Georgia,serif}.close{border:0;border-radius:50%;width:34px;height:34px;background:#edf0e9;color:var(--ink);font-size:1.25rem;cursor:pointer}.content{padding:1.25rem 1.5rem}.section{border:0;border-top:1px solid var(--line);padding:1.1rem 0 0;margin:0 0 1.15rem}.section legend{padding:0;font-weight:800;font-size:.82rem}.field{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.9rem 0}.field label{font-weight:700}.field small{display:block;color:var(--muted);font-weight:400;font-size:.77rem}.select{min-width:145px;border:1px solid #cbd5cc;border-radius:9px;background:#fff;padding:.65rem;color:var(--ink)}.switch{position:relative;width:46px;height:26px;flex:none}.switch input{opacity:0;width:0;height:0}.slider{position:absolute;inset:0;border-radius:30px;background:#cbd5cc;cursor:pointer;transition:.2s}.slider:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px #0003}.switch input:checked+.slider{background:var(--forest2)}.switch input:checked+.slider:before{transform:translateX(20px)}.switch input:focus-visible+.slider,.select:focus-visible,.close:focus-visible,.button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}.actions{display:flex;justify-content:flex-end;gap:.6rem;padding-top:.3rem}.button{border:0;border-radius:9px;padding:.7rem 1rem;font:inherit;font-weight:800;cursor:pointer}.button.ghost{background:transparent;border:1px solid #cbd5cc;color:var(--ink)}.button.primary{background:var(--forest);color:#fff}.status{min-height:1.4em;margin:0 0 .5rem;color:var(--forest2);font-size:.8rem;font-weight:700}@media(max-width:460px){.modal-header,.content{padding-left:1rem;padding-right:1rem}.field{align-items:flex-start}.select{min-width:125px}}
+  </style>
+</head>
+<body>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-component="settings">
+    <header class="modal-header"><div><p class="eyebrow">RESERVA ARARAS</p><h1 id="settingsTitle">Configurações</h1></div><button class="close" type="button" aria-label="Fechar configurações" data-action="close">×</button></header>
+    <form id="settingsForm" class="content">
+      <fieldset class="section"><legend>Experiência</legend>
+        <div class="field"><div><label for="audioEnabled">Sons da interface</label><small>Usa sons apenas quando o aplicativo oferecer esse recurso.</small></div><span class="switch"><input id="audioEnabled" name="audioEnabled" type="checkbox"><span class="slider" aria-hidden="true"></span></span></div>
+        <div class="field"><div><label for="reducedMotion">Reduzir movimento</label><small>Desativa transições e animações decorativas.</small></div><span class="switch"><input id="reducedMotion" name="reducedMotion" type="checkbox"><span class="slider" aria-hidden="true"></span></span></div>
+      </fieldset>
+      <fieldset class="section"><legend>Simulação</legend>
+        <div class="field"><div><label for="mapSize">Tamanho do mapa</label><small>Disponível para próximas configurações da turma.</small></div><select id="mapSize" class="select" name="mapSize"><option value="8x6">8 × 6 parcelas</option><option value="10x8">10 × 8 parcelas</option></select></div>
+        <div class="field"><div><label for="difficulty">Ritmo dos desafios</label><small>Não altera o valor pedagógico dos indicadores.</small></div><select id="difficulty" class="select" name="difficulty"><option value="calmo">Calmo</option><option value="guiado">Guiado</option><option value="exploracao">Exploração</option></select></div>
+      </fieldset>
+      <p id="settingsStatus" class="status" role="status" aria-live="polite"></p>
+      <div class="actions"><button class="button ghost" type="button" data-action="cancel">Cancelar</button><button class="button primary" type="submit">Aplicar configurações</button></div>
+    </form>
+  </section>
+  <script>
+    (() => {
+      'use strict';
+      const KEY = 'reserva_araras_settings';
+      const defaults = { audioEnabled: false, reducedMotion: false, mapSize: '8x6', difficulty: 'calmo' };
+      const form = document.querySelector('#settingsForm');
+      const status = document.querySelector('#settingsStatus');
+      let initial = readSettings();
+      function readSettings() { try { return { ...defaults, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch (_) { return { ...defaults }; } }
+      function writeForm(settings) { form.audioEnabled.checked = Boolean(settings.audioEnabled); form.reducedMotion.checked = Boolean(settings.reducedMotion); form.mapSize.value = settings.mapSize; form.difficulty.value = settings.difficulty; }
+      function currentSettings() { return { audioEnabled: form.audioEnabled.checked, reducedMotion: form.reducedMotion.checked, mapSize: form.mapSize.value, difficulty: form.difficulty.value }; }
+      function applySettings(settings) { localStorage.setItem(KEY, JSON.stringify(settings)); document.documentElement.dataset.reducedMotion = settings.reducedMotion ? 'true' : 'false'; window.dispatchEvent(new CustomEvent('reserva:settings-change', { detail: settings })); status.textContent = 'Configurações aplicadas nesta sessão.'; initial = { ...settings }; }
+      function close() { writeForm(initial); window.dispatchEvent(new CustomEvent('reserva:settings-close')); }
+      function toggleAudio(enabled) { form.audioEnabled.checked = Boolean(enabled); }
+      function changeMapSize(size) { if ([...form.mapSize.options].some(option => option.value === size)) form.mapSize.value = size; }
+      function adjustDifficulty(level) { if ([...form.difficulty.options].some(option => option.value === level)) form.difficulty.value = level; }
+      form.addEventListener('submit', event => { event.preventDefault(); applySettings(currentSettings()); });
+      document.addEventListener('click', event => { const action = event.target.closest('[data-action]')?.dataset.action; if (action === 'close' || action === 'cancel') close(); });
+      writeForm(initial);
+      window.ReservaSettings = { toggleAudio, changeMapSize, adjustDifficulty, applySettings, readSettings };
+      window.toggleAudio = toggleAudio; window.changeMapSize = changeMapSize; window.adjustDifficulty = adjustDifficulty;
+    })();
+  </script>
+</body>
+</html>

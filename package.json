@@ -1,0 +1,17 @@
+{
+  "name": "reserva-araras",
+  "private": true,
+  "description": "Contratos locais do jogo Reserva Araras",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "validate:report": "python validate_report.py",
+    "validate:article": "python validate_article_references.py",
+    "maturity": "python project_maturity.py",
+    "maturity:evidence": "python project_maturity.py --evidence evidence.json",
+    "verify": "npm run test && npm run validate:report && npm run validate:article && npm run maturity:evidence",
+    "check": "npm run verify"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aviso | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--forest:#245747;--paper:#fffdf8;--cream:#f5f1e7;--rust:#923e2c;--line:#d9ded2;--muted:#687a73;--gold:#d5a84f;--shadow:0 18px 45px rgba(22,51,43,.22)}*{box-sizing:border-box}body{display:grid;place-items:center;margin:0;min-height:100vh;padding:1rem;background:rgba(17,43,35,.64);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.modal{width:min(480px,100%);background:var(--paper);border:1px solid var(--line);border-top:5px solid var(--rust);border-radius:16px;padding:1.5rem;box-shadow:var(--shadow)}.modal[hidden]{display:none}.eyebrow{margin:0;color:var(--rust);font-size:.68rem;font-weight:800;letter-spacing:.14em}.modal h1{margin:.25rem 2rem .55rem 0;font:600 1.65rem Georgia,serif}.message{margin:0;color:var(--muted);white-space:pre-wrap}.notice{margin:1rem 0 0;padding:.8rem;border-left:3px solid var(--gold);border-radius:0 9px 9px 0;background:#f7f1df;color:var(--ink);font-size:.85rem}.actions{display:flex;justify-content:flex-end;gap:.55rem;margin-top:1.2rem}.button,.close{border:0;border-radius:9px;font:inherit;cursor:pointer}.button{padding:.7rem 1rem;background:var(--forest);color:#fff;font-weight:800}.close{position:absolute;right:.8rem;top:.8rem;width:32px;height:32px;background:#edf0e9;color:var(--ink);font-size:1.2rem}.modal-shell{position:relative}.button:focus-visible,.close:focus-visible{outline:3px solid var(--gold);outline-offset:2px}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="modal-shell">
+    <section id="alertModal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle" aria-describedby="alertMessage" hidden>
+      <button class="close" type="button" aria-label="Fechar aviso" data-action="close">×</button>
+      <p class="eyebrow">ATENÇÃO</p>
+      <h1 id="alertTitle">Algo precisa ser revisto</h1>
+      <p id="alertMessage" class="message"></p>
+      <p id="alertNotice" class="notice" hidden></p>
+      <div class="actions"><button class="button" type="button" data-action="close">Voltar à investigação</button></div>
+    </section>
+  </div>
+  <script>
+    (() => {
+      'use strict';
+      const modal = document.querySelector('#alertModal');
+      const title = document.querySelector('#alertTitle');
+      const message = document.querySelector('#alertMessage');
+      const notice = document.querySelector('#alertNotice');
+      let lastFocus = null;
+      function showCriticalAlert(nextTitle, nextMessage) {
+        lastFocus = document.activeElement;
+        title.textContent = String(nextTitle || 'Algo precisa ser revisto');
+        message.textContent = String(nextMessage || 'Confira os dados e tente novamente.');
+        notice.hidden = true;
+        modal.hidden = false;
+        modal.querySelector('[data-action="close"]').focus();
+      }
+      function renderFalenciaNotice(text = 'O orçamento não cobre esta ação. Escolha outra intervenção ou revise o mapa.') {
+        showCriticalAlert('Orçamento insuficiente', text);
+        notice.textContent = String(text);
+        notice.hidden = false;
+      }
+      function closeAlert() {
+        modal.hidden = true;
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+        window.dispatchEvent(new CustomEvent('reserva:alert-close'));
+      }
+      modal.addEventListener('click', event => { if (event.target.closest('[data-action="close"]')) closeAlert(); });
+      document.addEventListener('keydown', event => { if (event.key === 'Escape' && !modal.hidden) closeAlert(); });
+      window.ReservaAlert = { showCriticalAlert, renderFalenciaNotice, closeAlert };
+      window.showCriticalAlert = showCriticalAlert;
+      window.renderFalenciaNotice = renderFalenciaNotice;
+      window.closeAlert = closeAlert;
+    })();
+  </script>
+</body>
+</html>

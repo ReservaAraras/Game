@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Roteiro inicial | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--forest:#245747;--paper:#fffdf8;--cream:#f5f1e7;--line:#d9ded2;--gold:#d5a84f;--muted:#687a73;--shadow:0 18px 45px rgba(22,51,43,.2)}*{box-sizing:border-box}body{display:grid;place-items:center;margin:0;min-height:100vh;padding:1rem;background:rgba(17,43,35,.64);color:var(--ink);font:15px/1.55 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.overlay{width:min(560px,100%);margin:auto;align-self:center;background:var(--paper);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}.progress{height:5px;background:#e2e7dd}.progress i{display:block;height:100%;width:25%;background:var(--gold);transition:.25s}.inner{padding:1.5rem}.eyebrow{margin:0;color:#367565;font-size:.68rem;font-weight:800;letter-spacing:.14em}.inner h1{margin:.25rem 0 .7rem;font:600 1.75rem Georgia,serif}.message{color:var(--muted);min-height:100px}.step-label{font-size:.75rem;color:var(--forest);font-weight:800}.actions{display:flex;justify-content:space-between;gap:.6rem;margin-top:1.3rem}.button{border:0;border-radius:9px;padding:.7rem 1rem;font:inherit;font-weight:800;cursor:pointer}.button.primary{background:var(--forest);color:#fff}.button.ghost{background:transparent;border:1px solid #cbd5cc;color:var(--ink)}.button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}.target-highlight{position:relative!important;z-index:101!important;outline:4px solid var(--gold)!important;outline-offset:5px!important;box-shadow:0 0 0 9999px rgba(17,43,35,.28),0 0 0 7px rgba(213,168,79,.3)!important}@media(prefers-reduced-motion:reduce){.progress i{transition:none}.target-highlight{box-shadow:0 0 0 9999px rgba(17,43,35,.28)!important}}
+  </style>
+</head>
+<body>
+  <section class="overlay" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle" data-component="tutorial">
+    <div class="progress" aria-hidden="true"><i id="tutorialProgress"></i></div><div class="inner"><p class="eyebrow">PRIMEIROS PASSOS</p><p id="tutorialStep" class="step-label">Passo 1 de 4</p><h1 id="tutorialTitle">Observe antes de intervir</h1><p id="tutorialMessage" class="message">Comece olhando as parcelas e lendo a legenda. Uma boa investigação começa com uma pergunta.</p><div class="actions"><button class="button ghost" type="button" data-action="skip">Pular roteiro</button><div><button class="button ghost" type="button" data-action="back" hidden>Voltar</button><button class="button primary" type="button" data-action="next">Começar</button></div></div></div>
+  </section>
+  <script>
+    (() => {
+      'use strict';
+      const steps = [
+        { title: 'Observe antes de intervir', message: 'Comece olhando as parcelas e lendo a legenda. Uma boa investigação começa com uma pergunta.', target: '#map' },
+        { title: 'Escolha uma ação', message: 'Selecione uma ferramenta de manejo e depois toque em uma parcela. Mudar uma variável por vez facilita a comparação.', target: '[data-tool="saf"]' },
+        { title: 'Compare os indicadores', message: 'Veja orçamento, conservação, carbono e produção. Pergunte qual escolha pode explicar a mudança.', target: '.metric-grid' },
+        { title: 'Registre o que descobriu', message: 'No caderno, escreva hipótese, evidência, explicação e próximo teste. O objetivo é justificar o raciocínio.', target: '[data-action="study"]' }
+      ];
+      let current = 0; let previousTarget = null;
+      const title = document.querySelector('#tutorialTitle'); const message = document.querySelector('#tutorialMessage'); const stepLabel = document.querySelector('#tutorialStep'); const progress = document.querySelector('#tutorialProgress'); const back = document.querySelector('[data-action="back"]'); const next = document.querySelector('[data-action="next"]');
+      function highlightNextButton(targetSelector = steps[current].target) { if (previousTarget) previousTarget.classList.remove('target-highlight'); const target = document.querySelector(targetSelector); if (target) { target.classList.add('target-highlight'); previousTarget = target; } return target; }
+      function displayTutorialMessage(step = steps[current]) { title.textContent = step.title; message.textContent = step.message; stepLabel.textContent = `Passo ${current + 1} de ${steps.length}`; progress.style.width = `${((current + 1) / steps.length) * 100}%`; back.hidden = current === 0; next.textContent = current === steps.length - 1 ? 'Concluir' : 'Continuar'; highlightNextButton(); }
+      function finish() { if (previousTarget) previousTarget.classList.remove('target-highlight'); window.dispatchEvent(new CustomEvent('reserva:tutorial-complete')); }
+      function skipTutorial() { finish(); }
+      next.addEventListener('click', () => { if (current === steps.length - 1) return finish(); current += 1; displayTutorialMessage(); }); back.addEventListener('click', () => { if (current > 0) { current -= 1; displayTutorialMessage(); } }); document.addEventListener('click', event => { const action = event.target.closest('[data-action]')?.dataset.action; if (action === 'skip') skipTutorial(); }); document.addEventListener('keydown', event => { if (event.key === 'Escape') skipTutorial(); }); displayTutorialMessage();
+      window.ReservaTutorial = { highlightNextButton, displayTutorialMessage, skipTutorial, finish }; window.highlightNextButton = highlightNextButton; window.displayTutorialMessage = displayTutorialMessage; window.skipTutorial = skipTutorial;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,632 @@
+<script>
+(() => {
+  'use strict';
+  const DEFAULT_TOOLS = {
+    native: { label: 'Cerrado nativo', cost: 0, effect: 'Vegetação em regeneração natural; boa permeabilidade e biodiversidade.' },
+    saf: { label: 'Sistema agroflorestal', cost: 4500, effect: 'Produção diversificada com cobertura permanente do solo.' },
+    reserve: { label: 'Reserva legal', cost: 1800, effect: 'Proteção integral; alto potencial de carbono e conectividade.' },
+    trail: { label: 'Trilha ecológica', cost: 2600, effect: 'Visitação controlada e educação ambiental.' },
+    water: { label: 'Nascente recuperada', cost: 3200, effect: 'Zona sensível com proteção hídrica prioritária.' },
+    clear: { label: 'Cerrado nativo', cost: 0, effect: 'Vegetação em regeneração natural; boa permeabilidade e biodiversidade.' }
+  };
+  const state = { token: sessionStorage.getItem('reserva_token') || '', player: null, activeTool: 'inspect', selectedTile: null, saveId: null, saveName: 'Minha investigação', dirty: false, busy: false, saveBusy: false, game: null, dashboard: null, tools: DEFAULT_TOOLS };
+  let modalReturnFocus = null;
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+  // A única porta de transporte do frontend. A lista também funciona como um
+  // contrato local: uma ação nova não pode chamar silenciosamente uma função
+  // Apps Script inexistente ou arbitrária.
+  const SERVER_METHODS = new Set([
+    'loginPlayer', 'registerPlayer', 'resumeSession', 'logout',
+    'getSimulationBootstrap', 'applySimulationAction', 'evaluateSimulationState',
+    'saveGame', 'listSaves', 'loadGame', 'deleteGame',
+    'getAssetManifest', 'getAssetLibraryContract', 'getAssetData'
+  ]);
+
+  function server(method, ...args) {
+    if (!SERVER_METHODS.has(method)) {
+      return Promise.reject(new Error('Operação de servidor não mapeada: ' + method));
+    }
+    return new Promise((resolve, reject) => {
+      const runner = google.script.run
+        .withSuccessHandler(result => {
+          if (result && result.success === false) {
+            const error = new Error(result.error || result.message || 'A operação não foi concluída.');
+            error.code = result.code || 'BACKEND_ERROR';
+            reject(error);
+            return;
+          }
+          if (result && result.ok === false) {
+            const error = new Error(result.message || 'A operação não foi concluída.');
+            error.code = result.error && result.error.code || 'BACKEND_ERROR';
+            reject(error);
+            return;
+          }
+          resolve(result);
+        })
+        .withFailureHandler(error => reject(new Error(String(error?.message || error).replace(/^Exception:\s*/, ''))));
+      runner[method].apply(runner, args);
+    });
+  }
+
+  function defaultGame() {
+    const tiles = Array.from({ length: 48 }, (_, i) => ({ type: [11, 19, 27, 35].includes(i) ? 'water' : 'native' }));
+    return { budget: 50000, cycle: 1, tiles, journal: emptyJournal() };
+  }
+
+  function applyToolContract(tools = []) {
+    state.tools = { ...DEFAULT_TOOLS };
+    tools.forEach(tool => { if (tool && tool.id) state.tools[tool.id] = { ...state.tools[tool.id], ...tool }; });
+  }
+
+  function toolDefinition(type) { return state.tools[type] || DEFAULT_TOOLS[type] || DEFAULT_TOOLS.native; }
+
+  function emptyJournal() {
+    return { question: 'Como combinar conservação, produção e cuidado com a água?', hypothesis: '', baseline: null, pendingIntervention: null, observation: '', explanation: '', nextStep: '', records: [] };
+  }
+
+  function ensureJournal() {
+    if (!state.game || typeof state.game !== 'object') state.game = defaultGame();
+    if (!state.game.journal || typeof state.game.journal !== 'object') state.game.journal = emptyJournal();
+    state.game.journal.records = Array.isArray(state.game.journal.records) ? state.game.journal.records : [];
+    return state.game.journal;
+  }
+
+  function setView(view) {
+    $('#loading').classList.add('hidden');
+    $('#authView').classList.toggle('hidden', view !== 'auth');
+    $('#app').classList.toggle('hidden', view !== 'app');
+  }
+
+  async function boot() {
+    try {
+      bindEvents();
+      if (!state.token) {
+        setView('auth');
+        return;
+      }
+      const result = await server('resumeSession', state.token);
+      await enterApp(result.player);
+    } catch (_) {
+      sessionStorage.removeItem('reserva_token');
+      state.token = '';
+      setView('auth');
+    } finally {
+      // Nunca manter a tela de preparação sobre a interface após a inicialização.
+      $('#loading').classList.add('hidden');
+    }
+  }
+
+  function bindEvents() {
+    $('#loginForm').addEventListener('submit', event => authenticate(event, 'loginPlayer'));
+    $('#registerForm').addEventListener('submit', event => authenticate(event, 'registerPlayer'));
+    $$('[data-password-toggle]').forEach(button => button.addEventListener('click', () => {
+      const input = document.getElementById(button.dataset.passwordToggle);
+      if (!input) return;
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      button.textContent = showing ? 'Mostrar' : 'Ocultar';
+      button.setAttribute('aria-pressed', String(!showing));
+      button.setAttribute('aria-label', showing ? 'Mostrar senha' : 'Ocultar senha');
+      input.focus();
+    }));
+    document.addEventListener('click', event => {
+      const actionButton = event.target.closest('[data-action]');
+      const toolButton = event.target.closest('[data-tool]');
+      if (toolButton) selectTool(toolButton.dataset.tool);
+      if (actionButton) handleAction(actionButton.dataset.action, actionButton);
+    });
+    window.addEventListener('reserva:menu-action', event => {
+      if (event.detail && event.detail.action) {
+        handleAction(event.detail.action);
+      }
+    });
+    $('#modal').addEventListener('click', event => { if (event.target === $('#modal')) closeModal(); });
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') { closeModal(); return; }
+      if (['TEXTAREA', 'INPUT', 'SELECT'].indexOf(document.activeElement ? document.activeElement.tagName : '') !== -1) return;
+      var key = event.key;
+      // Números 1–6 acompanham, na mesma ordem, as ferramentas visíveis.
+      var toolKeys = { '1': 'inspect', '2': 'saf', '3': 'reserve', '4': 'trail', '5': 'water', '6': 'clear' };
+      if (toolKeys[key] && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        selectTool(toolKeys[key]);
+        return;
+      }
+      // Setas: navegar pelas parcelas do mapa (6 colunas)
+      var map = document.getElementById('map') || document.querySelector('.tile-grid, .map-grid, [data-map]');
+      if (!map) return;
+      var tiles = Array.prototype.filter.call(map.querySelectorAll('.tile, [data-tile-index]'), function(el) { return el.offsetParent !== null; });
+      if (!tiles.length) return;
+      var cur = tiles.indexOf(document.activeElement);
+      var COLS = 6;
+      var next = -1;
+      if (key === 'ArrowRight' && cur >= 0 && (cur % COLS) < COLS - 1) next = cur + 1;
+      else if (key === 'ArrowLeft' && cur > 0 && (cur % COLS) > 0) next = cur - 1;
+      else if (key === 'ArrowDown' && cur + COLS < tiles.length) next = cur + COLS;
+      else if (key === 'ArrowUp' && cur - COLS >= 0) next = cur - COLS;
+      else if (key === 'Enter' || key === ' ') {
+        if (cur >= 0) { event.preventDefault(); tiles[cur].click(); }
+        return;
+      }
+      if (next >= 0) { event.preventDefault(); tiles[next].focus(); }
+    });
+    selectTool(state.activeTool);
+  }
+
+  async function authenticate(event, method) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const error = $('.form-error', form);
+    const submit = $('button[type="submit"]', form);
+    error.classList.add('hidden'); submit.disabled = true; submit.textContent = 'Aguarde…';
+    form.setAttribute('aria-busy', 'true'); submit.setAttribute('aria-busy', 'true');
+    try {
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const result = await server(method, payload);
+      state.token = result.token; sessionStorage.setItem('reserva_token', result.token);
+      form.reset(); await enterApp(result.player);
+    } catch (err) {
+      error.textContent = err.message; error.classList.remove('hidden');
+    } finally {
+      submit.disabled = false; submit.textContent = method === 'loginPlayer' ? 'Entrar' : 'Criar e entrar';
+      form.setAttribute('aria-busy', 'false'); submit.setAttribute('aria-busy', 'false');
+    }
+  }
+
+  async function enterApp(player) {
+    state.player = player; state.game = defaultGame(); state.dashboard = null;
+    $('#playerName').textContent = player.displayName;
+    $('#playerRole').textContent = player.role;
+    $('#avatar').textContent = player.displayName.charAt(0).toUpperCase();
+    setView('app'); render();
+    $('#saveStatus').textContent = 'Sincronizando modelo…';
+    try {
+      const bootstrap = await server('getSimulationBootstrap', state.token);
+      state.player = bootstrap.player || player;
+      state.game = bootstrap.state;
+      state.dashboard = bootstrap.dashboard;
+      applyToolContract(bootstrap.tools);
+      render();
+    } catch (err) { handleServerError(err); }
+  }
+
+  function render() {
+    renderMap(); renderMetrics();
+    updateWorkflow();
+    $('#reserveTitle').textContent = state.saveName;
+    $('#saveStatus').textContent = state.dirty ? 'Alterações não salvas' : 'Tudo salvo';
+  }
+
+  function updateWorkflow() {
+    const node = $('#experimentWorkflow');
+    if (!node || !state.game) return;
+    const journal = ensureJournal();
+    if (state.selectedTile === null) {
+      node.textContent = '1 Observar: escolha uma parcela no mapa.';
+    } else if (!journal.baseline && !String(journal.hypothesis || '').trim()) {
+      node.textContent = '2 Registrar hipótese: abra o Caderno antes de mudar o mapa.';
+    } else if (!journal.pendingIntervention) {
+      node.textContent = '3 Testar uma mudança: escolha uma intervenção e observe o efeito.';
+    } else if (journal.pendingIntervention) {
+      node.textContent = '4 Comparar: abra o Caderno para explicar o que mudou.';
+    } else {
+      node.textContent = '5 Revisar e salvar: proponha o próximo teste ou salve esta versão.';
+    }
+  }
+
+  function renderMap() {
+    const map = $('#map'); map.replaceChildren(); map.setAttribute('aria-busy', String(state.busy));
+    state.game.tiles.forEach((tile, index) => {
+      const button = document.createElement('button');
+      button.className = `tile ${tile.type}${state.selectedTile === index ? ' selected' : ''}`;
+      button.dataset.index = index;
+      button.type = 'button';
+      button.disabled = state.busy;
+      button.setAttribute('role', 'gridcell');
+      button.setAttribute('aria-selected', String(state.selectedTile === index));
+      button.setAttribute('aria-label', `Parcela ${index + 1}: ${toolDefinition(tile.type).label}`);
+      button.title = `${toolDefinition(tile.type).label} • parcela ${index + 1}`;
+      button.addEventListener('click', () => interactWithTile(index, button));
+      map.appendChild(button);
+    });
+  }
+
+  function selectTool(tool) {
+    const journal = ensureJournal();
+    if (tool !== 'inspect' && journal.pendingIntervention) {
+      toast('Feche a comparação da intervenção anterior antes de mudar outra variável.', true);
+      showStudyJournal();
+      return;
+    }
+    if (tool !== 'inspect' && !journal.baseline && !String(journal.hypothesis || '').trim()) {
+      state.activeTool = 'inspect';
+      $$('.tool').forEach(button => {
+        const selected = button.dataset.tool === 'inspect';
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      });
+      toast('Antes de testar, registre uma hipótese no Caderno de investigação.');
+      showStudyJournal();
+      updateWorkflow();
+      return;
+    }
+    state.activeTool = tool;
+    $$('.tool').forEach(button => {
+      const selected = button.dataset.tool === tool;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+    const instruction = $('#mapInstruction');
+    if (instruction) instruction.innerHTML = tool === 'inspect'
+      ? '<strong>Passo 1:</strong> selecione uma parcela para começar a observação.'
+      : `<strong>Passo 2:</strong> selecione uma parcela para aplicar “${toolDefinition(tool).label}”.`;
+  }
+
+  async function interactWithTile(index, element) {
+    state.selectedTile = index;
+    $$('.tile').forEach(tile => {
+      tile.classList.remove('selected');
+      tile.setAttribute('aria-selected', 'false');
+    });
+    element.classList.add('selected');
+    element.setAttribute('aria-selected', 'true');
+    const tile = state.game.tiles[index];
+    if (state.activeTool === 'inspect') {
+      showParcel(index, tile);
+      const instruction = $('#mapInstruction');
+      if (instruction) instruction.innerHTML = '<strong>Agora observe:</strong> use o painel à direita para comparar o efeito antes de mudar outra parcela.';
+      updateWorkflow();
+      return;
+    }
+    if (ensureJournal().pendingIntervention) {
+      toast('Registre a comparação da intervenção anterior antes do próximo teste.', true);
+      showStudyJournal();
+      return;
+    }
+    if (state.busy) return;
+    state.busy = true; renderMap();
+    try {
+      const result = await server('applySimulationAction', state.token, { state: state.game, index, tool: state.activeTool });
+      state.game = result.state; state.dashboard = result.dashboard; markDirty(); render();
+      showParcel(index, state.game.tiles[index]); toast(result.event.message);
+      const instruction = $('#mapInstruction');
+      if (instruction) instruction.innerHTML = '<strong>Passo 3:</strong> compare os indicadores à direita. Salve a atividade ou teste apenas mais uma mudança.';
+      updateWorkflow();
+    } catch (err) { handleServerError(err); }
+    finally {
+      state.busy = false;
+      renderMap();
+      const selected = $(`.tile[data-index="${state.selectedTile}"]`);
+      if (selected) selected.focus();
+    }
+  }
+
+  function showParcel(index, tile) {
+    const definition = toolDefinition(tile.type); const card = $('#parcelInfo'); card.replaceChildren();
+    const eyebrow = document.createElement('span'); eyebrow.className = 'eyebrow'; eyebrow.textContent = `PARCELA ${index + 1}`;
+    const title = document.createElement('h3'); title.textContent = definition.label;
+    const description = document.createElement('p'); description.textContent = definition.effect;
+    card.append(eyebrow, title, description);
+  }
+
+  function calculateMetrics() {
+    const counts = state.game.tiles.reduce((sum, tile) => { sum[tile.type] = (sum[tile.type] || 0) + 1; return sum; }, {});
+    const conservation = Math.round(((counts.native || 0) + (counts.reserve || 0) + (counts.water || 0)) / 48 * 100);
+    const carbon = 120 + (counts.reserve || 0) * 18 + (counts.saf || 0) * 7;
+    const production = (counts.saf || 0) * 12 + (counts.trail || 0) * 5;
+    const health = Math.min(100, Math.round(conservation * .8 + Math.min(20, (counts.saf || 0) * 2)));
+    return { conservation, carbon, production, health };
+  }
+
+  function renderMetrics() {
+    const metric = state.dashboard?.metrics || calculateMetrics();
+    $('#budgetMetric').textContent = formatMoney(state.game.budget);
+    $('#conservationMetric').textContent = metric.conservation + '%';
+    $('#carbonMetric').textContent = metric.carbon + ' t';
+    $('#productionMetric').textContent = metric.production;
+    $('#healthBar').style.width = metric.health + '%';
+    $('#healthLabel').textContent = metric.health >= 80 ? 'Muito bom' : metric.health >= 60 ? 'Bom' : metric.health >= 40 ? 'Em atenção' : 'Baixo';
+    const evaluation = state.dashboard?.evaluation;
+    $('#evaluationScore').textContent = evaluation ? `${Math.round(evaluation.score)}/100` : '—';
+    $('#evaluationCategory').textContent = evaluation?.category || 'Aguardando análise';
+  }
+
+  async function refreshDashboard() {
+    state.dashboard = await server('evaluateSimulationState', state.token, state.game);
+    return state.dashboard;
+  }
+
+  function markDirty() { state.dirty = true; }
+  function formatMoney(value) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value); }
+
+  async function handleAction(action, button) {
+    if (action === 'show-register' || action === 'show-login') {
+      $('#loginForm').classList.toggle('hidden', action === 'show-register');
+      $('#registerForm').classList.toggle('hidden', action !== 'show-register'); return;
+    }
+    if (action === 'close-modal') return closeModal();
+    if (action === 'logout') return doLogout();
+    if (action === 'save') return saveCurrent(button);
+    if (action === 'saves') return showSaves(button);
+    if (action === 'assets') return showAssets(button);
+    if (action === 'study') return showStudyJournal(button);
+    if (action === 'save-study') return saveStudy(button);
+    if (action === 'evaluation') return showEvaluation(button);
+    if (action === 'guide') return showTeacherGuide(button);
+    if (action === 'load-save') return loadSave(button.dataset.id);
+    if (action === 'delete-save') return deleteSave(button.dataset.id);
+    if (action === 'open-asset') return openAsset(button.dataset.id, button.dataset.ext);
+  }
+
+  async function saveCurrent(button) {
+    if (state.saveBusy) return;
+    if (!state.saveId) {
+      openModal(`<h2 id="modalTitle">Salvar atividade</h2>
+        <p class="muted">Dê um nome para identificar esta versão da sua reserva na planilha.</p>
+        <form id="saveNameForm" class="study-form" style="margin-top:12px;">
+          <label><span>Nome da reserva:</span>
+            <input type="text" id="reserveNameInput" name="reserveName" maxlength="60" required value="${escapeHtml(state.saveName || 'Minha investigação')}" autofocus>
+          </label>
+          <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+            <button class="button secondary" type="button" data-action="close-modal">Cancelar</button>
+            <button class="button primary" type="submit">Salvar agora</button>
+          </div>
+        </form>`, button);
+      const form = $('#saveNameForm');
+      if (form) {
+        form.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          const input = $('#reserveNameInput');
+          const name = input ? input.value.trim() : '';
+          if (!name) return;
+          closeModal();
+          await executeSave(name, button);
+        });
+      }
+      return;
+    }
+    await executeSave(state.saveName, button);
+  }
+
+  async function executeSave(name, button) {
+    state.saveBusy = true;
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = 'Salvando…';
+    }
+    $('#saveStatus').textContent = 'Salvando atividade…';
+    try {
+      const saved = await server('saveGame', state.token, { id: state.saveId, name, state: state.game });
+      state.saveId = saved.id; state.saveName = saved.name; state.dashboard = saved.dashboard || state.dashboard; state.dirty = false; render(); toast('Reserva salva na planilha.');
+    } catch (err) { render(); handleServerError(err); }
+    finally {
+      state.saveBusy = false;
+      if (button) {
+        button.disabled = false;
+        button.setAttribute('aria-busy', 'false');
+        button.textContent = 'Salvar atividade';
+      }
+    }
+  }
+
+  function showStudyJournal(trigger) {
+    const journal = ensureJournal();
+    const current = state.dashboard?.metrics || calculateMetrics();
+    const baseline = journal.baseline;
+    const comparison = baseline
+      ? `<div class="comparison-grid">${comparisonCard('Conservação', baseline.conservation, current.conservation, '%')}${comparisonCard('Carbono', baseline.carbon, current.carbon, ' t')}${comparisonCard('Produção', baseline.production, current.production, '')}${comparisonCard('Orçamento', baseline.budget, state.game.budget, '', true)}</div>`
+      : '<p class="journal-hint">A comparação antes/depois aparecerá quando você fizer a primeira intervenção.</p>';
+    const pending = journal.pendingIntervention
+      ? `<p class="journal-hint"><strong>Intervenção em análise:</strong> parcela ${journal.pendingIntervention.parcel}, ${escapeHtml(toolDefinition(journal.pendingIntervention.tool).label)}. Feche esta comparação antes de testar outra variável.</p>`
+      : '';
+    const history = journal.records.length
+      ? `<details class="experiment-history"><summary>Histórico de versões (${journal.records.length})</summary>${journal.records.slice().reverse().map((record, index) => `<article><strong>Versão ${journal.records.length - index}</strong><span>${escapeHtml(record.intervention?.label || 'Intervenção registrada')}</span><small>${escapeHtml(record.explanation || '')}</small></article>`).join('')}</details>`
+      : '';
+    openModal(`<h2 id="modalTitle">Caderno de investigação</h2>
+      <p class="muted">Registre seu raciocínio. O objetivo não é obter o maior número, mas justificar uma escolha com evidências.</p>
+      <form id="studyForm" class="study-form">
+        <label><span>1. Pergunta de investigação</span><textarea name="question" maxlength="240" required>${escapeHtml(journal.question || '')}</textarea></label>
+        <label><span>2. Minha hipótese — antes de testar</span><textarea name="hypothesis" maxlength="600" ${journal.baseline ? '' : 'required'} placeholder="Eu penso que… porque…">${escapeHtml(journal.hypothesis || '')}</textarea></label>
+        ${pending}<section><strong>3. Compare os indicadores</strong>${comparison}</section>
+        <label><span>4. O que observei?</span><textarea name="observation" maxlength="600" placeholder="O indicador… mudou de… para…">${escapeHtml(journal.observation || '')}</textarea></label>
+        <label><span>5. Como explico o resultado?</span><textarea name="explanation" maxlength="800" placeholder="Isso aconteceu porque…">${escapeHtml(journal.explanation || '')}</textarea></label>
+        <label><span>6. Próximo teste</span><textarea name="nextStep" maxlength="400" placeholder="Na próxima versão, vou mudar apenas…">${escapeHtml(journal.nextStep || '')}</textarea></label>
+        <button class="button primary" type="button" data-action="save-study">${journal.pendingIntervention ? 'Fechar comparação' : 'Guardar hipótese'}</button>
+        ${history}
+      </form>`, trigger);
+  }
+
+  function comparisonCard(label, before, after, suffix, money = false) {
+    const format = value => money ? formatMoney(value) : value + suffix;
+    const delta = after - before;
+    return `<article><small>${label}</small><strong>${format(before)} → ${format(after)}</strong><span>${delta === 0 ? 'sem mudança' : (delta > 0 ? '+' : '') + (money ? formatMoney(delta) : delta + suffix)}</span></article>`;
+  }
+
+  async function saveStudy(button) {
+    const form = button.closest('form');
+    const values = Object.fromEntries(new FormData(form).entries());
+    const journal = ensureJournal();
+    if (!String(values.question || '').trim()) return toast('Registre uma pergunta para orientar a investigação.', true);
+    if (!journal.baseline && !String(values.hypothesis || '').trim()) {
+      return toast('Antes da primeira intervenção, registre sua hipótese.', true);
+    }
+    Object.assign(journal, values);
+    const metrics = state.dashboard?.metrics || calculateMetrics();
+    if (journal.pendingIntervention) {
+      if (!String(values.observation || '').trim() || !String(values.explanation || '').trim() || !String(values.nextStep || '').trim()) {
+        return toast('Para fechar a comparação, registre observação, explicação e próximo teste.', true);
+      }
+      journal.records.push({
+        recordedAt: new Date().toISOString(),
+        hypothesis: values.hypothesis || '',
+        baseline: journal.baseline,
+        current: { ...metrics, budget: state.game.budget },
+        intervention: { ...journal.pendingIntervention, label: toolDefinition(journal.pendingIntervention.tool).label },
+        observation: values.observation || '', explanation: values.explanation || '', nextStep: values.nextStep || ''
+      });
+      journal.records = journal.records.slice(-12);
+      journal.pendingIntervention = null;
+      journal.baseline = null;
+      journal.hypothesis = '';
+    }
+    markDirty(); closeModal();
+    try { await refreshDashboard(); render(); toast(journal.records.length ? 'Comparação registrada. Formule uma nova hipótese ou salve a atividade.' : 'Hipótese guardada. Agora teste uma mudança.'); }
+    catch (err) { handleServerError(err); }
+  }
+
+  function showEvaluation(trigger) {
+    const dashboard = state.dashboard;
+    if (!dashboard) return toast('A avaliação ainda está sendo calculada.', true);
+    const labels = { conservation: 'Conservação', carbon: 'Carbono', production: 'Produção', balance: 'Equilíbrio' };
+    const dimensions = Object.entries(dashboard.evaluation.dimensions).map(([key, value]) => `<div class="dimension-row"><span>${labels[key] || escapeHtml(key)}</span><div class="progress"><i style="width:${Math.max(0, Math.min(100, Number(value) || 0))}%"></i></div><strong>${Math.round(value)}</strong></div>`).join('');
+    const incentive = dashboard.incentive;
+    openModal(`<h2 id="modalTitle">Leitura integrada do modelo</h2><p class="muted">O modelo recalcula estes indicadores a partir das 48 parcelas. Eles apoiam a comparação e não são nota.</p><p><strong>${Math.round(dashboard.evaluation.score)}/100 — ${escapeHtml(dashboard.evaluation.category)}</strong></p><div class="dimension-list">${dimensions}</div><div class="incentive-card"><strong>${incentive.eligible ? `Cenário didático de incentivo: ${formatMoney(incentive.incentive)}` : 'Cenário ainda não elegível para incentivo'}</strong><small>Índice de elegibilidade: ${Math.round(incentive.eligibilityIndex)}%. ${escapeHtml(incentive.modelWarning)}</small></div><p class="model-note">${escapeHtml(dashboard.modelWarning)}</p>`, trigger);
+  }
+
+  function showTeacherGuide(trigger) {
+    openModal(`<h2 id="modalTitle">Roteiro de mediação docente</h2>
+      <div class="teacher-guide">
+        <p><strong>Questão norteadora:</strong> como combinar conservação, produção e cuidado com a água em um território?</p>
+        <ol><li>Comece com leitura do mapa e vocabulário visual.</li><li>Peça uma hipótese antes da primeira intervenção.</li><li>Oriente o grupo a mudar uma variável por vez.</li><li>Solicite uma evidência numérica e uma explicação causal.</li><li>Compare versões e discuta o que o modelo deixou de representar.</li></ol>
+        <p><strong>Evidências formativas:</strong> hipótese, comparação antes/depois, explicação, revisão e reconhecimento dos limites da simulação.</p>
+        <p><strong>Importante:</strong> orçamento, carbono e equilíbrio são parâmetros didáticos; não use o resultado como nota nem como recomendação ambiental real.</p>
+        <p class="muted">Articulação indicativa: Ciências, Geografia, Matemática e Língua Portuguesa. A habilidade BNCC deve ser escolhida conforme o ano e o planejamento da turma.</p>
+      </div>`, trigger);
+  }
+
+  async function showSaves(trigger) {
+    openModal('<h2 id="modalTitle">Atividades salvas</h2><p class="muted">Carregando seus registros…</p>', trigger);
+    try {
+      const saves = await server('listSaves', state.token);
+      const rows = saves.length ? saves.map(save => `<div class="save-row"><div><strong>${escapeHtml(save.name)}</strong><small>Atualizado em ${formatDate(save.updatedAt)}</small></div><span class="row-actions"><button data-action="load-save" data-id="${save.id}">Abrir</button><button data-action="delete-save" data-id="${save.id}">Excluir</button></span></div>`).join('') : '<div class="empty-state"><p class="muted">Nenhuma atividade salva ainda.</p><button class="button primary" type="button" data-action="close-modal">Voltar ao mapa e criar uma atividade</button></div>';
+      $('#modalBody').innerHTML = `<h2 id="modalTitle">Atividades salvas</h2><div class="save-list">${rows}</div>`;
+    } catch (err) { closeModal(); handleServerError(err); }
+  }
+
+  async function loadSave(id) {
+    if (state.dirty) {
+      openModal(`<h2 id="modalTitle">Descartar alterações?</h2>
+        <p class="muted">Existem modificações não salvas nesta sessão que serão perdidas ao carregar outro registro.</p>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+          <button class="button secondary" type="button" data-action="close-modal">Cancelar</button>
+          <button class="button primary" type="button" id="confirmLoadBtn">Carregar mesmo assim</button>
+        </div>`);
+      $('#confirmLoadBtn')?.addEventListener('click', async () => {
+        closeModal();
+        await performLoad(id);
+      });
+      return;
+    }
+    await performLoad(id);
+  }
+
+  async function performLoad(id) {
+    try {
+      const saved = await server('loadGame', state.token, id);
+      if (!saved.state || !Array.isArray(saved.state.tiles) || saved.state.tiles.length !== 48) throw new Error('O estado salvo é incompatível com este mapa.');
+      state.saveId = saved.id; state.saveName = saved.name; state.game = saved.state; state.selectedTile = null; ensureJournal(); state.dashboard = saved.dashboard || await refreshDashboard(); state.dirty = false; closeModal(); render(); toast('Atividade carregada.');
+    } catch (err) { handleServerError(err); }
+  }
+
+  async function deleteSave(id) {
+    openModal(`<h2 id="modalTitle">Excluir atividade?</h2>
+      <p class="muted">Tem certeza de que deseja excluir permanentemente este registro salvo?</p>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="button secondary" type="button" data-action="close-modal">Cancelar</button>
+        <button class="button danger" style="background:#dc2626;color:#fff;" type="button" id="confirmDeleteBtn">Sim, excluir</button>
+      </div>`);
+    $('#confirmDeleteBtn')?.addEventListener('click', async () => {
+      closeModal();
+      try {
+        await server('deleteGame', state.token, id);
+        if (state.saveId === id) { state.saveId = null; state.saveName = 'Minha investigação'; state.dirty = true; }
+        await showSaves();
+        toast('Registro excluído.');
+      } catch (err) { handleServerError(err); }
+    });
+  }
+
+  async function showAssets(trigger) {
+    openModal('<h2 id="modalTitle">Biblioteca de assets</h2><p class="muted">Lendo a pasta configurada no Drive…</p>', trigger);
+    try {
+      const contract = await server('getAssetLibraryContract', state.token);
+      if (!contract || !contract.ok) throw new Error((contract && contract.error) || 'Biblioteca de assets não configurada.');
+      const assets = contract.assets || [];
+      const rows = assets.length ? assets.map(asset => `<div class="asset-row"><div><strong>${escapeHtml(asset.name)}</strong><small>${asset.extension.toUpperCase()} • ${formatBytes(asset.size)}</small></div><button class="button secondary" data-action="open-asset" data-id="${asset.id}" data-ext="${asset.extension}">Carregar</button></div>`).join('') : `<p class="muted">Nenhum asset compatível encontrado em ${escapeHtml(contract.folderProperty)}.</p>`;
+      $('#modalBody').innerHTML = `<h2 id="modalTitle">Biblioteca de assets</h2><p class="muted">Arquivos são carregados sob demanda, evitando uma tela inicial pesada.</p><div class="asset-list">${rows}</div>`;
+    } catch (err) { closeModal(); handleServerError(err); }
+  }
+
+  async function openAsset(id, extension) {
+    try {
+      toast('Carregando asset…');
+      const asset = await server('getAssetData', state.token, id);
+      let preview = `<a class="button primary" download="${escapeHtml(asset.name)}" href="${asset.dataUrl}">Baixar arquivo</a>`;
+      if (['png','jpg','jpeg','webp','gif','svg'].includes(extension)) preview = `<img class="asset-preview" alt="${escapeHtml(asset.name)}" src="${asset.dataUrl}">${preview}`;
+      if (['mp3','ogg','wav'].includes(extension)) preview = `<audio class="asset-preview" controls src="${asset.dataUrl}"></audio>${preview}`;
+      if (['glb','gltf'].includes(extension)) preview = `<p class="muted">Modelo 3D pronto para uso por um renderizador WebGL/Three.js. O protótipo permite baixar e validar o arquivo.</p>${preview}`;
+      openModal(`<h2 id="modalTitle">${escapeHtml(asset.name)}</h2>${preview}`);
+    } catch (err) { handleServerError(err); }
+  }
+
+  async function doLogout() {
+    if (state.dirty) {
+      openModal(`<h2 id="modalTitle">Sair sem salvar?</h2>
+        <p class="muted">Você tem alterações não salvas que serão perdidas ao sair.</p>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+          <button class="button secondary" type="button" data-action="close-modal">Continuar na atividade</button>
+          <button class="button danger" style="background:#dc2626;color:#fff;" type="button" id="confirmLogoutBtn">Sair mesmo assim</button>
+        </div>`);
+      $('#confirmLogoutBtn')?.addEventListener('click', async () => {
+        closeModal();
+        await performLogout();
+      });
+      return;
+    }
+    await performLogout();
+  }
+
+  async function performLogout() {
+    const button = $('[data-action="logout"]');
+    const label = button ? button.textContent : 'Sair';
+    if (button) { button.disabled = true; button.textContent = 'Saindo…'; }
+    try {
+      await server('logout', state.token);
+      sessionStorage.removeItem('reserva_token');
+      location.reload();
+    } catch (error) {
+      if (button) { button.disabled = false; button.textContent = 'Tentar sair novamente'; }
+      toast(error && error.message ? error.message : 'Não foi possível encerrar a sessão.', true);
+    }
+  }
+
+  function openModal(html, trigger) {
+    const modal = $('#modal');
+    if (modal.classList.contains('hidden')) modalReturnFocus = trigger || document.activeElement;
+    $('#modalBody').innerHTML = html;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    const focusTarget = $('[autofocus]', modal) || $('.modal-close', modal);
+    if (focusTarget) focusTarget.focus();
+  }
+
+  function closeModal() {
+    const modal = $('#modal');
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    const returnFocus = modalReturnFocus;
+    modalReturnFocus = null;
+    if (returnFocus && document.contains(returnFocus) && typeof returnFocus.focus === 'function') returnFocus.focus();
+  }
+  function toast(message, error = false) { const node = document.createElement('div'); node.className = 'toast' + (error ? ' error' : ''); node.textContent = message; $('#toastRegion').appendChild(node); setTimeout(() => node.remove(), 3500); }
+  function handleServerError(error) { if (/sessão/i.test(error.message)) { sessionStorage.removeItem('reserva_token'); toast(error.message, true); setTimeout(() => location.reload(), 1000); } else toast(error.message, true); }
+  function formatDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'data desconhecida' : date.toLocaleString('pt-BR'); }
+  function formatBytes(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / 1048576).toFixed(1) + ' MB'; }
+  function escapeHtml(value) { const div = document.createElement('div'); div.textContent = String(value); return div.innerHTML; }
+
+  boot();
+})();
+</script>

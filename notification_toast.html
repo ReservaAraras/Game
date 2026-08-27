@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notificações | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--paper:#fffdf8;--cream:#f5f1e7;--line:#d9ded2;--muted:#687a73;--rust:#923e2c;--gold:#d5a84f;--shadow:0 12px 28px rgba(22,51,43,.18)}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:transparent;color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.toasts{position:fixed;right:1rem;bottom:1rem;z-index:50;width:min(360px,calc(100vw - 2rem));display:grid;gap:.6rem}.toast{display:grid;grid-template-columns:1fr auto;gap:.7rem;align-items:start;padding:.85rem 1rem;background:var(--ink);color:#fff;border-radius:11px;box-shadow:var(--shadow);animation:toastIn .2s ease}.toast.success{background:#245747}.toast.error{background:var(--rust)}.toast.info{background:#386d75}.toast[hidden]{display:none}.toast strong{display:block;font-size:.8rem}.toast p{margin:.2rem 0 0;color:#e6eee8;font-size:.78rem}.close{border:0;background:transparent;color:#fff;font-size:1.1rem;cursor:pointer}.close:focus-visible{outline:3px solid var(--gold);outline-offset:2px}@keyframes toastIn{from{transform:translateY(8px);opacity:0}}@media(prefers-reduced-motion:reduce){.toast{animation:none}}
+  </style>
+</head>
+<body>
+  <section id="toastRegion" class="toasts" aria-label="Notificações" aria-live="polite" aria-relevant="additions"></section>
+  <script>
+    (() => {
+      'use strict';
+      const region = document.querySelector('#toastRegion'); const timers = new WeakMap(); const labels = { success: 'Feito', error: 'Atenção', info: 'Informação' };
+      function fadeOutToast(toast) { if (!toast || !toast.isConnected) return; const timer = timers.get(toast); if (timer) clearTimeout(timer); toast.remove(); }
+      function showToast(message, type = 'info', duration = 4000) { const kind = Object.prototype.hasOwnProperty.call(labels, type) ? type : 'info'; const toast = document.createElement('article'); toast.className = `toast ${kind}`; toast.setAttribute('role', kind === 'error' ? 'alert' : 'status'); const content = document.createElement('div'); const heading = document.createElement('strong'); heading.textContent = labels[kind]; const text = document.createElement('p'); text.textContent = String(message || 'Atualização do modelo.'); content.append(heading, text); const close = document.createElement('button'); close.type = 'button'; close.className = 'close'; close.setAttribute('aria-label', 'Fechar notificação'); close.textContent = '×'; close.addEventListener('click', () => fadeOutToast(toast)); toast.append(content, close); region.appendChild(toast); while (region.children.length > 4) region.firstElementChild.remove(); const timer = window.setTimeout(() => fadeOutToast(toast), Math.max(1500, Number(duration) || 4000)); timers.set(toast, timer); return toast; }
+      function queueNotifications(list = []) { return Array.isArray(list) ? list.map(item => { const data = typeof item === 'string' ? { message: item } : (item || {}); return showToast(data.message, data.type, data.duration); }) : []; }
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') fadeOutToast(region.lastElementChild); });
+      window.ReservaNotifications = { showToast, fadeOutToast, queueNotifications }; window.showToast = showToast; window.fadeOutToast = fadeOutToast; window.queueNotifications = queueNotifications;
+    })();
+  </script>
+</body>
+</html>

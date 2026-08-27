@@ -1,0 +1,84 @@
+<section id="authView" class="auth hidden">
+  <div class="auth-visual">
+    <div class="auth-copy"><span class="brand-mark large" data-brand-logo aria-label="Marca Reserva Araras"><img class="codex-login-logo" src="data:image/png;base64,<?!= includeInlineData("BrandLogoBase64") ?>" alt="Marca Reserva Araras"></span><p class="eyebrow">INVESTIGAÇÃO SOCIOAMBIENTAL</p><h1>Observe a terra.<br>Teste suas ideias.</h1><p>Uma simulação para investigar escolhas sobre o Cerrado, comparar resultados e explicar o que você descobriu.</p><div class="landscape" aria-hidden="true"><span class="sun"></span><span class="hill h1"></span><span class="hill h2"></span><span class="tree t1">♣</span><span class="tree t2">♣</span></div></div>
+  </div>
+  <div class="auth-panel">
+    <form id="loginForm" class="auth-card" autocomplete="on" aria-describedby="loginError">
+      <p class="eyebrow">BEM-VINDO(A)</p><h2>Entre na sua reserva</h2><p class="muted">Use as credenciais combinadas com sua professora ou seu professor.</p>
+      <label for="loginUsername">Usuário ou e-mail</label><input id="loginUsername" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" minlength="3" maxlength="120" required placeholder="seu.usuario ou aluno@escola.edu" autofocus>
+      <label for="loginPassword">Senha</label><div class="password-control"><input id="loginPassword" name="password" type="password" autocomplete="current-password" enterkeyhint="go" minlength="4" maxlength="200" required placeholder="Sua senha"><button class="password-toggle" type="button" data-password-toggle="loginPassword" aria-controls="loginPassword" aria-pressed="false" aria-label="Mostrar senha">Mostrar</button></div>
+      <p id="loginError" class="form-error hidden" role="alert" aria-live="assertive" aria-atomic="true"></p>
+      <button class="button primary wide" id="loginSubmit" type="submit" disabled>Entrar</button>
+      <button class="link-button" type="button" data-action="show-register">Primeiro acesso? Criar estudante</button>
+      <small class="security-note">Protótipo educacional: não reutilize aqui uma senha pessoal.</small>
+    </form>
+    <form id="registerForm" class="auth-card hidden" autocomplete="on" aria-describedby="registerError">
+      <p class="eyebrow">NOVO ESTUDANTE</p><h2>Crie seu acesso</h2>
+      <label>Como quer ser chamado(a)?<input name="displayName" maxlength="60" required placeholder="Ana Silva"></label>
+      <label>Nome de usuário<input name="username" minlength="3" required placeholder="ana.silva"></label>
+      <label for="registerPassword">Senha</label><div class="password-control"><input id="registerPassword" name="password" type="password" minlength="4" autocomplete="new-password" required placeholder="Mínimo de 4 caracteres"><button class="password-toggle" type="button" data-password-toggle="registerPassword" aria-controls="registerPassword" aria-pressed="false" aria-label="Mostrar senha">Mostrar</button></div>
+      <p id="registerError" class="form-error hidden" role="alert" aria-live="assertive" aria-atomic="true"></p>
+      <button class="button primary wide" type="submit">Criar e entrar</button>
+      <button class="link-button" type="button" data-action="show-login">Já tenho um acesso</button>
+    </form>
+  </div>
+</section>
+<script>
+  (function () {
+    var loginForm = document.getElementById('loginForm');
+    var registerForm = document.getElementById('registerForm');
+    var loginUsername = document.getElementById('loginUsername');
+    var loginPassword = document.getElementById('loginPassword');
+    var loginSubmit = document.getElementById('loginSubmit');
+    var loginError = document.getElementById('loginError');
+    var registerError = document.getElementById('registerError');
+
+    function updateLoginState() {
+      var userOk = loginUsername.value.trim().length >= 3;
+      var passOk = loginPassword.value.length >= 4;
+      loginSubmit.disabled = !(userOk && passOk);
+      loginUsername.setAttribute('aria-invalid', userOk ? 'false' : 'true');
+      loginPassword.setAttribute('aria-invalid', passOk ? 'false' : 'true');
+    }
+
+    [loginUsername, loginPassword].forEach(function (field) {
+      field.addEventListener('input', function () {
+        if (loginError.textContent) {
+          loginError.textContent = '';
+          loginError.classList.add('hidden');
+        }
+        updateLoginState();
+      });
+    });
+
+    loginForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (loginUsername.value.trim().length < 3) {
+        loginError.textContent = 'Informe um usuário ou e-mail válido.';
+        loginError.classList.remove('hidden');
+        loginUsername.focus();
+        return;
+      }
+      if (loginPassword.value.length < 4) {
+        loginError.textContent = 'A senha precisa ter pelo menos 4 caracteres.';
+        loginError.classList.remove('hidden');
+        loginPassword.focus();
+        return;
+      }
+      loginError.textContent = 'Autenticando...';
+      loginError.classList.remove('hidden');
+    });
+
+    registerForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (registerError.textContent) {
+        registerError.textContent = '';
+        registerError.classList.add('hidden');
+      }
+      registerError.textContent = 'Conta pronta para ser criada.';
+      registerError.classList.remove('hidden');
+    });
+
+    updateLoginState();
+  }());
+</script>

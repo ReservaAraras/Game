@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Reserva Araras</title>
+  <?!= include('style'); ?>
+  <style>
+    .map-heading { margin-bottom: .45rem; }
+    .map-instruction { margin: 0 0 1rem; color: #52675c; font-size: .78rem; }
+    .map-instruction strong { color: #284f3c; }
+    .experiment-workflow { margin: 0 0 1rem; padding: .65rem .8rem; border-left: 3px solid var(--gold); border-radius: 0 9px 9px 0; background: #f7f1df; color: #52675c; font-size: .76rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading" role="status" aria-live="polite">
+    <div class="loader-mark">RA</div><p>Preparando a reserva…</p>
+  </div>
+
+  <?!= include('login'); ?>
+
+  <main id="app" class="app hidden">
+    <?!= include('GameScene'); ?>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">RA</span><div><strong>Reserva Araras</strong><small>Laboratório do Cerrado</small></div></div>
+      <div class="top-actions">
+        <span id="saveStatus" class="save-status">Sem alterações</span>
+        <button class="button ghost" type="button" data-action="guide">Roteiro docente</button>
+        <button class="button ghost" type="button" data-action="assets">Biblioteca</button>
+        <button class="button ghost" type="button" data-action="logout">Sair</button>
+        <div class="avatar" id="avatar" aria-hidden="true">A</div>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="sidebar">
+        <div class="profile"><small>EXPLORADOR(A)</small><strong id="playerName">Estudante</strong><span id="playerRole">Estudante</span></div>
+        <nav aria-label="Ferramentas de manejo">
+          <p class="nav-label">MANEJO</p>
+          <button class="tool active" type="button" data-tool="inspect" aria-keyshortcuts="1"><span>⌖</span><div><strong>Inspecionar</strong><small>Consultar uma parcela • tecla 1</small></div></button>
+          <button class="tool" type="button" data-tool="saf" aria-keyshortcuts="2"><span>♧</span><div><strong>Agrofloresta</strong><small>R$ 4.500 • +produção • tecla 2</small></div></button>
+          <button class="tool" type="button" data-tool="reserve" aria-keyshortcuts="3"><span>◉</span><div><strong>Reserva legal</strong><small>R$ 1.800 • +carbono • tecla 3</small></div></button>
+          <button class="tool" type="button" data-tool="trail" aria-keyshortcuts="4"><span>⌁</span><div><strong>Trilha ecológica</strong><small>R$ 2.600 • +visitação • tecla 4</small></div></button>
+          <button class="tool" type="button" data-tool="water" aria-keyshortcuts="5"><span>◌</span><div><strong>Recuperar nascente</strong><small>R$ 3.200 • +água • tecla 5</small></div></button>
+          <button class="tool danger" type="button" data-tool="clear" aria-keyshortcuts="6"><span>×</span><div><strong>Desfazer intervenção</strong><small>Volta ao Cerrado nativo • tecla 6</small></div></button>
+        </nav>
+        <div class="side-actions">
+          <button class="button primary wide" type="button" data-action="study">Caderno de investigação</button>
+          <button class="button secondary wide" type="button" data-action="save">Salvar atividade</button>
+          <button class="button ghost wide" type="button" data-action="saves">Abrir atividades</button>
+        </div>
+      </aside>
+
+      <section class="map-area" aria-label="Mapa da reserva">
+        <div class="map-heading"><div><span class="eyebrow">CERRADO • SIMULAÇÃO</span><h1 id="reserveTitle">Minha investigação</h1></div><div class="season"><span class="weather">☀</span><div><strong>Estação seca</strong><small>Observe, escolha e compare</small></div></div></div>
+        <p id="mapInstruction" class="map-instruction" role="status"><strong>Passo 1:</strong> selecione uma parcela para começar a observação.</p>
+        <div id="experimentWorkflow" class="experiment-workflow" role="status" aria-live="polite">1 Observar → 2 Registrar hipótese → 3 Testar uma mudança → 4 Comparar e salvar</div>
+        <div class="map-shell">
+          <div id="map" class="map-grid" role="grid" aria-label="Parcelas da reserva"></div>
+          <div class="map-legend"><span><i class="dot native"></i>Cerrado</span><span><i class="dot saf"></i>SAF</span><span><i class="dot reserve"></i>Reserva</span><span><i class="dot water"></i>Nascente</span></div>
+        </div>
+      </section>
+
+      <aside class="inspector">
+        <span class="eyebrow">PAINEL DA RESERVA</span>
+        <h2>O que mudou?</h2>
+        <p class="muted">Use os indicadores para comparar escolhas. Eles descrevem este modelo, não uma nota do estudante.</p>
+        <div class="metric-grid">
+          <article><small>ORÇAMENTO</small><strong id="budgetMetric">R$ 50.000</strong><span>Disponível</span></article>
+          <article><small>CONSERVAÇÃO</small><strong id="conservationMetric">60%</strong><span>Meta: 80%</span></article>
+          <article><small>CARBONO</small><strong id="carbonMetric">120 t</strong><span>CO₂ estimado</span></article>
+          <article><small>PRODUÇÃO</small><strong id="productionMetric">0</strong><span>pontos/ciclo</span></article>
+        </div>
+        <div class="progress-block"><div><span>Equilíbrio no modelo</span><strong id="healthLabel">Bom</strong></div><div class="progress"><i id="healthBar"></i></div></div>
+        <div class="evaluation-summary" aria-live="polite"><div><small>LEITURA INTEGRADA</small><strong id="evaluationScore">—</strong></div><div><span id="evaluationCategory">Aguardando análise</span><button class="link-button compact" type="button" data-action="evaluation">Ver critérios</button></div></div>
+        <div id="parcelInfo" class="parcel-card"><span class="eyebrow">PARCELA SELECIONADA</span><h3>Nenhuma parcela</h3><p>Escolha “Inspecionar” e toque no mapa para ver detalhes.</p></div>
+        <div class="tip"><strong>Pense como cientista</strong><p>Antes de mudar o mapa, registre uma hipótese. Depois, cite um indicador, explique o resultado e teste apenas uma mudança por vez.</p></div>
+        <p class="model-note">As regras e os valores são simplificações didáticas. Decisões ambientais reais exigem observação de campo, comunidade e orientação técnica.</p>
+      </aside>
+    </section>
+  </main>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true"><div class="modal-card"><button class="modal-close" type="button" data-action="close-modal" aria-label="Fechar">×</button><div id="modalBody"></div></div></div>
+  <div id="toastRegion" class="toasts" aria-live="polite"></div>
+  <?!= include('script'); ?>
+</body>
+</html>

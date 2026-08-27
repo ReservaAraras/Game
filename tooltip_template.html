@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dica da parcela | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--forest:#245747;--paper:#fffdf8;--line:#d9ded2;--muted:#687a73;--gold:#d5a84f;--shadow:0 12px 28px rgba(22,51,43,.18)}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:transparent;color:var(--ink);font:13px/1.4 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.tooltip{position:fixed;z-index:120;width:min(260px,calc(100vw - 1rem));padding:.9rem;background:var(--paper);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);transform:translate(-50%,-100%);margin-top:-12px}.tooltip[hidden]{display:none}.header{display:flex;align-items:flex-start;gap:.6rem;padding-bottom:.6rem;border-bottom:1px solid var(--line)}.icon{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:8px;background:#e5ecdc;color:var(--forest);font-weight:900}.header strong{display:block;font:600 1rem Georgia,serif}.header small{color:var(--muted)}.rows{display:grid;gap:.35rem;margin-top:.65rem}.row{display:flex;justify-content:space-between;gap:1rem}.row dt{color:var(--muted)}.row dd{margin:0;font-weight:800;text-align:right}.hint{margin:.7rem 0 0;padding-top:.6rem;border-top:1px dashed var(--line);color:var(--muted);font-size:.75rem}.close{position:absolute;right:.4rem;top:.35rem;border:0;background:transparent;color:var(--muted);font-size:1rem;cursor:pointer}.close:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  </style>
+</head>
+<body>
+  <aside id="tooltip" class="tooltip" role="tooltip" aria-live="polite" hidden><button class="close" type="button" aria-label="Fechar dica" data-action="close">×</button><div class="header"><span id="tooltipIcon" class="icon" aria-hidden="true">⌖</span><div><strong id="tooltipTitle">Parcela</strong><small id="tooltipSubtitle">Detalhes do modelo</small></div></div><dl id="tooltipRows" class="rows"></dl><p id="tooltipHint" class="hint"></p></aside>
+  <script>
+    (() => {
+      'use strict';
+      const tooltip = document.querySelector('#tooltip'); const title = document.querySelector('#tooltipTitle'); const subtitle = document.querySelector('#tooltipSubtitle'); const icon = document.querySelector('#tooltipIcon'); const rows = document.querySelector('#tooltipRows'); const hint = document.querySelector('#tooltipHint');
+      function formatTooltipHeader(value) { const data = typeof value === 'string' ? { title: value } : (value || {}); title.textContent = String(data.title || 'Parcela'); subtitle.textContent = String(data.subtitle || 'Detalhes do modelo'); icon.textContent = String(data.icon || '⌖').slice(0, 2); return data; }
+      function appendTooltipRow(label, value) { const row = document.createElement('div'); row.className = 'row'; const term = document.createElement('dt'); term.textContent = String(label); const description = document.createElement('dd'); description.textContent = String(value); row.append(term, description); rows.appendChild(row); return row; }
+      function renderTooltipNearMouse(x, y) { const margin = 8; const rect = tooltip.getBoundingClientRect(); const half = rect.width / 2; const left = Math.max(half + margin, Math.min(window.innerWidth - half - margin, Number(x) || 0)); const top = Math.max(rect.height + margin, Math.min(window.innerHeight - margin, Number(y) || 0)); tooltip.style.left = `${left}px`; tooltip.style.top = `${top}px`; tooltip.hidden = false; }
+      function showTooltip(header, entries = [], note = '', position) { formatTooltipHeader(header); rows.replaceChildren(); entries.forEach(entry => appendTooltipRow(entry.label, entry.value)); hint.textContent = String(note || ''); hint.hidden = !note; renderTooltipNearMouse(position?.x ?? window.innerWidth / 2, position?.y ?? window.innerHeight / 2); }
+      function hideTooltip() { tooltip.hidden = true; }
+      window.addEventListener('resize', hideTooltip); document.addEventListener('click', event => { if (event.target.closest('[data-action="close"]')) hideTooltip(); }); document.addEventListener('keydown', event => { if (event.key === 'Escape') hideTooltip(); });
+      window.ReservaTooltip = { formatTooltipHeader, appendTooltipRow, renderTooltipNearMouse, showTooltip, hideTooltip }; window.formatTooltipHeader = formatTooltipHeader; window.appendTooltipRow = appendTooltipRow; window.renderTooltipNearMouse = renderTooltipNearMouse;
+    })();
+  </script>
+</body>
+</html>

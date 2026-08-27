@@ -1,0 +1,33 @@
+{
+  "automated_tests": {
+    "passed": false,
+    "verified_at": "AAAA-MM-DDTHH:MM:SSZ"
+  },
+  "runtime_verified": {
+    "passed": false,
+    "verified_at": "AAAA-MM-DDTHH:MM:SSZ",
+    "checks": [
+      "setup",
+      "authentication",
+      "simulation_action",
+      "save_load"
+    ]
+  },
+  "deployment_verified": {
+    "passed": false,
+    "verified_at": "AAAA-MM-DDTHH:MM:SSZ",
+    "deployment_id": "ID_NAO_SENSIVEL",
+    "url_checked": false
+  },
+  "user_validation": {
+    "passed": false,
+    "verified_at": "AAAA-MM-DDTHH:MM:SSZ",
+    "participants": 0,
+    "scenarios": [
+      "login",
+      "intervencao",
+      "save_load"
+    ]
+  }
+}
+

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Registro de descoberta | Reserva Araras</title>
+  <style>
+    :root{--ink:#17362e;--forest:#245747;--paper:#fffdf8;--cream:#f5f1e7;--gold:#d5a84f;--muted:#687a73;--line:#d9ded2;--shadow:0 18px 45px rgba(22,51,43,.2)}*{box-sizing:border-box}body{display:grid;place-items:center;margin:0;min-height:100vh;padding:1rem;background:rgba(17,43,35,.5);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}.popup{width:min(430px,100%);margin:auto;align-self:center;position:relative;background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:1.5rem;box-shadow:var(--shadow);text-align:center}.close{position:absolute;right:.8rem;top:.8rem;width:32px;height:32px;border:0;border-radius:50%;background:#edf0e9;font-size:1.15rem;color:var(--ink);cursor:pointer}.badge{width:70px;height:70px;margin:.2rem auto .8rem;display:grid;place-items:center;border-radius:50%;background:#f4e8bf;color:#8b6820;font-size:2rem}.eyebrow{margin:0;color:#367565;font-size:.68rem;font-weight:800;letter-spacing:.14em}.popup h1{margin:.25rem 0 .45rem;font:600 1.65rem Georgia,serif}.popup p{color:var(--muted)}.reflection{margin:1rem 0;padding:.75rem;text-align:left;border-left:3px solid var(--gold);background:#f7f1df;border-radius:0 9px 9px 0;font-size:.85rem}.button{border:0;border-radius:9px;padding:.7rem 1rem;background:var(--forest);color:#fff;font:inherit;font-weight:800;cursor:pointer}.button:focus-visible,.close:focus-visible{outline:3px solid var(--gold);outline-offset:2px}.reduced-motion *{animation:none!important;transition:none!important}
+  </style>
+</head>
+<body>
+  <section id="achievementPopup" class="popup" role="status" aria-live="polite" aria-labelledby="achievementTitle" data-component="achievement" hidden><button class="close" type="button" aria-label="Fechar descoberta" data-action="close">×</button><div id="achievementBadge" class="badge" aria-hidden="true">✦</div><p class="eyebrow">REGISTRO DE DESCOBERTA</p><h1 id="achievementTitle">Você registrou uma ideia</h1><p id="achievementDescription">Uma etapa importante da investigação foi documentada.</p><p id="achievementReflection" class="reflection"></p><button class="button" type="button" data-action="close">Voltar à investigação</button></section>
+  <script>
+    (() => {
+      'use strict';
+      const achievements = {
+        hypothesis: { badge: '？', title: 'Hipótese registrada', description: 'Você colocou uma ideia antes de testar uma intervenção.', reflection: 'Uma hipótese ajuda a observar se a evidência confirma ou modifica o que você pensava.' },
+        evidence: { badge: '↔', title: 'Comparação realizada', description: 'Você criou uma linha de base para comparar duas versões do mapa.', reflection: 'Qual indicador mudou? O que pode explicar essa mudança?' },
+        explanation: { badge: '≋', title: 'Explicação construída', description: 'Você relacionou uma escolha a um resultado observado.', reflection: 'Uma boa explicação cita evidência e deixa clara a relação de causa e consequência.' },
+        revision: { badge: '↻', title: 'Próximo teste planejado', description: 'Você registrou como continuará investigando.', reflection: 'Na próxima versão, qual variável ficará constante?' },
+        limits: { badge: '◌', title: 'Limite reconhecido', description: 'Você lembrou que uma simulação não representa todo o território real.', reflection: 'Que observação de campo ajudaria a complementar este modelo?' }
+      };
+      const popup = document.querySelector('#achievementPopup'); const badge = document.querySelector('#achievementBadge'); const title = document.querySelector('#achievementTitle'); const description = document.querySelector('#achievementDescription'); const reflection = document.querySelector('#achievementReflection');
+      function triggerUnlockedPopup(achievementId) { const achievement = achievements[achievementId] || achievements.hypothesis; badge.textContent = achievement.badge; title.textContent = achievement.title; description.textContent = achievement.description; reflection.textContent = achievement.reflection; popup.hidden = false; popup.querySelector('[data-action="close"]').focus(); window.dispatchEvent(new CustomEvent('reserva:achievement-shown', { detail: { id: achievementId in achievements ? achievementId : 'hypothesis' } })); }
+      function displayAchievementReward(achievementId) { triggerUnlockedPopup(achievementId); }
+      function closeAchievementWindow() { popup.hidden = true; window.dispatchEvent(new CustomEvent('reserva:achievement-close')); }
+      document.addEventListener('click', event => { if (event.target.closest('[data-action="close"]')) closeAchievementWindow(); }); document.addEventListener('keydown', event => { if (event.key === 'Escape' && !popup.hidden) closeAchievementWindow(); });
+      window.ReservaAchievement = { triggerUnlockedPopup, displayAchievementReward, closeAchievementWindow }; window.triggerUnlockedPopup = triggerUnlockedPopup; window.displayAchievementReward = displayAchievementReward; window.closeAchievementWindow = closeAchievementWindow;
+    })();
+  </script>
+</body>
+</html>

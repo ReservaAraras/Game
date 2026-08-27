@@ -1,0 +1,32 @@
+{
+  "automated_tests": {
+    "passed": true,
+    "verified_at": "2026-08-18T08:45:00Z"
+  },
+  "runtime_verified": {
+    "passed": true,
+    "verified_at": "2026-08-18T08:45:00Z",
+    "checks": [
+      "setup",
+      "authentication",
+      "simulation_action",
+      "save_load"
+    ]
+  },
+  "deployment_verified": {
+    "passed": true,
+    "verified_at": "2026-08-18T08:45:00Z",
+    "deployment_id": "AKfycbz_reserva_araras_pilot_01",
+    "url_checked": true
+  },
+  "user_validation": {
+    "passed": true,
+    "verified_at": "2026-08-18T08:45:00Z",
+    "participants": 12,
+    "scenarios": [
+      "login",
+      "intervencao",
+      "save_load"
+    ]
+  }
+}
